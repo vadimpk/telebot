@@ -63,7 +63,7 @@ func (b *Bot) Raw(method string, payload interface{}) ([]byte, error) {
 		return nil, wrapError(err)
 	}
 
-	if b.verbose {
+	if b.handler.verbose {
 		verbose(method, payload, data)
 	}
 
