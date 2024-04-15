@@ -33,10 +33,7 @@ func NewBot(pref Settings) (*Bot, error) {
 		Token:   pref.Token,
 		URL:     pref.URL,
 		handler: pref.Handler,
-
-		Updates: pref.Updates,
-
-		client: client,
+		client:  client,
 	}
 
 	if pref.Offline {
@@ -57,7 +54,6 @@ type Bot struct {
 	Me      *User
 	Token   string
 	URL     string
-	Updates chan Update
 	handler *Handler
 
 	client *http.Client
@@ -68,9 +64,6 @@ type Bot struct {
 type Settings struct {
 	URL   string
 	Token string
-
-	// Updates channel
-	Updates chan Update
 
 	// Handler is a set of handlers for different endpoints.
 	Handler *Handler

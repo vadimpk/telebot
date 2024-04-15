@@ -1,4 +1,67 @@
 # Telebot
+
+### What's new in this fork?
+Separated `Webhook` and `Handler` from `Bot` struct. This allows you to create multiple `Bot` instances with the same `Webhook` and `Handler` settings. This could be useful if you want to create multiple bots with the same logic for handling messages, but with different tokens.
+
+> Note: this fork might not have some functionalities that the original package has. If you need those functionalities, you can use the original package.
+
+> Note #2: this fork doesn't support `Poller`, only `Webhook`.
+
+Example:
+```go
+package main
+
+import (
+	"os"
+
+	tele "github.com/vadimpk/telebot"
+)
+
+func main() {
+	webhook := &tele.Webhook{
+		Listen: os.Getenv("LISTEN"),
+	}
+
+	// Start the webhook and pass the channel to receive updates
+	updates := make(chan tele.Update)
+	go webhook.Start(updates)
+
+	// Create a new handler and add some logic
+	handler := tele.NewHandler(tele.HandlerSettings{
+		ParseMode: tele.ModeHTML,
+	})
+
+	handler.Handle("/start", func(c tele.Context) error {
+		return c.Reply("Hello, World!")
+	})
+
+	bot, err := tele.NewBot(tele.Settings{
+		Token:   os.Getenv("TOKEN"),
+		Handler: handler,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	args := map[string]string{
+		"bot_id": "1",
+		"some_other_bot_data": "some_other_bot_data",
+	}
+	err = bot.SetWebhook(webhook, args)
+	if err != nil {
+		panic(err)
+	}
+
+	for update := range updates {
+		if update.Args["bot_id"] == "1" {
+			bot.ProcessUpdate(update)
+		}
+	}
+}
+```
+
+---
+
 >"I never knew creating Telegram bots could be so _sexy_!"
 
 [![GoDoc](https://godoc.org/gopkg.in/telebot.v3?status.svg)](https://godoc.org/gopkg.in/telebot.v3)

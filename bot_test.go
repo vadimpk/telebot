@@ -59,7 +59,6 @@ func TestNewBot(t *testing.T) {
 
 	assert.NotNil(t, b.Me)
 	assert.Equal(t, DefaultApiURL, b.URL)
-	assert.Equal(t, 100, cap(b.Updates))
 	assert.NotZero(t, b.client.Timeout)
 
 	pref = defaultSettings()
@@ -72,7 +71,6 @@ func TestNewBot(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, client, b.client)
 	assert.Equal(t, pref.URL, b.URL)
-	assert.Equal(t, 50, cap(b.Updates))
 }
 
 func TestBotProcessUpdate(t *testing.T) {
