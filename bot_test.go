@@ -4,6 +4,8 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -14,12 +16,9 @@ import (
 
 var (
 	// required to test send and edit methods
-	//token     = os.Getenv("TELEBOT_SECRET")
-	//chatID, _ = strconv.ParseInt(os.Getenv("CHAT_ID"), 10, 64)
-	//userID, _ = strconv.ParseInt(os.Getenv("USER_ID"), 10, 64)
-	token  = "7013258382:AAEjpmkP2YpGEoeI-EfjebTBl5xkzAVLVPg"
-	chatID = int64(761303788)
-	userID = int64(761303788)
+	token     = os.Getenv("TELEBOT_SECRET")
+	chatID, _ = strconv.ParseInt(os.Getenv("CHAT_ID"), 10, 64)
+	userID, _ = strconv.ParseInt(os.Getenv("USER_ID"), 10, 64)
 
 	b, _ = newTestBot()      // cached bot instance to avoid getMe method flooding
 	to   = &Chat{ID: chatID} // to chat recipient for send and edit methods
