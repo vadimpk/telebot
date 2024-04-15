@@ -10,7 +10,7 @@ import (
 
 	"github.com/goccy/go-yaml"
 	"github.com/spf13/viper"
-	tele "gopkg.in/telebot.v3"
+	tele "github.com/vadimpk/telebot"
 )
 
 type Settings struct {

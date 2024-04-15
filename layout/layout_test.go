@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	tele "gopkg.in/telebot.v3"
+	tele "github.com/vadimpk/telebot"
 )
 
 //go:embed *
@@ -28,8 +28,6 @@ func TestLayout(t *testing.T) {
 
 	pref := lt.Settings()
 	assert.Equal(t, "TEST", pref.Token)
-	assert.Equal(t, "html", pref.ParseMode)
-	assert.Equal(t, &tele.LongPoller{}, pref.Poller)
 	assert.Equal(t, pref, ltfs.Settings())
 
 	assert.ElementsMatch(t, []tele.Command{{

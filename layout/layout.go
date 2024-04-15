@@ -11,7 +11,7 @@ import (
 	"text/template"
 
 	"github.com/goccy/go-yaml"
-	tele "gopkg.in/telebot.v3"
+	tele "github.com/vadimpk/telebot"
 )
 
 type (
