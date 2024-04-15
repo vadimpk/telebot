@@ -19,14 +19,17 @@ import (
 
 func main() {
 	webhook := &tele.Webhook{
-		Listen: os.Getenv("LISTEN"),
+		Listen: ":8080",
+		Endpoint: &tele.WebhookEndpoint{
+			PublicURL: os.Getenv("PUBLIC_URL"),
+		},
 	}
 
 	// Start the webhook and pass the channel to receive updates
 	updates := make(chan tele.Update)
 	go webhook.Start(updates)
 
-	// Create a new handler and add some logic
+	// Create a new handler and add some handlers
 	handler := tele.NewHandler(tele.HandlerSettings{
 		ParseMode: tele.ModeHTML,
 	})
@@ -35,27 +38,38 @@ func main() {
 		return c.Reply("Hello, World!")
 	})
 
-	bot, err := tele.NewBot(tele.Settings{
-		Token:   os.Getenv("TOKEN"),
+	// Create a map of bots to store multiple bots
+	bots := make(map[string]*tele.Bot)
+
+	// Create two bots
+	bot1, _ := tele.NewBot(tele.Settings{
+		Token:   os.Getenv("BOT_TOKEN_1"),
 		Handler: handler,
 	})
-	if err != nil {
-		panic(err)
-	}
 
-	args := map[string]string{
-		"bot_id": "1",
+	bot1.SetWebhook(webhook, map[string]string{
+		"bot_id":              "1",
 		"some_other_bot_data": "some_other_bot_data",
-	}
-	err = bot.SetWebhook(webhook, args)
-	if err != nil {
-		panic(err)
-	}
+	})
 
+	bot2, _ := tele.NewBot(tele.Settings{
+		Token:   os.Getenv("BOT_TOKEN_2"),
+		Handler: handler,
+	})
+
+	bot2.SetWebhook(webhook, map[string]string{
+		"bot_id":              "2",
+		"some_other_bot_data": "some_other_bot_data",
+	})
+
+	// Add the bots to the map
+	bots["1"] = bot1
+	bots["2"] = bot2
+
+	// Process the updates
 	for update := range updates {
-		if update.Args["bot_id"] == "1" {
-			bot.ProcessUpdate(update)
-		}
+		botID := update.Args["bot_id"]
+		bots[botID].ProcessUpdate(update)
 	}
 }
 ```
