@@ -10,17 +10,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
 // NewBot does try to build a Bot with token `token`, which
 // is a secret API key assigned to particular bot.
 func NewBot(pref Settings) (*Bot, error) {
-	if pref.Updates == 0 {
-		pref.Updates = 100
-	}
-
 	client := pref.Client
 	if client == nil {
 		client = &http.Client{Timeout: time.Minute}
@@ -33,18 +28,13 @@ func NewBot(pref Settings) (*Bot, error) {
 	if pref.URL == "" {
 		pref.URL = DefaultApiURL
 	}
-	if pref.Poller == nil {
-		pref.Poller = &LongPoller{}
-	}
 
 	bot := &Bot{
 		Token:   pref.Token,
 		URL:     pref.URL,
-		Poller:  pref.Poller,
 		handler: pref.Handler,
 
-		Updates: make(chan Update, pref.Updates),
-		stop:    make(chan chan struct{}),
+		Updates: pref.Updates,
 
 		client: client,
 	}
@@ -68,14 +58,9 @@ type Bot struct {
 	Token   string
 	URL     string
 	Updates chan Update
-	Poller  Poller
 	handler *Handler
 
 	client *http.Client
-
-	stop       chan chan struct{}
-	stopMu     sync.RWMutex
-	stopClient chan struct{}
 }
 
 // Settings represents a utility struct for passing certain
@@ -84,11 +69,8 @@ type Settings struct {
 	URL   string
 	Token string
 
-	// Updates channel capacity, defaulted to 100.
-	Updates int
-
-	// Poller is the provider of Updates.
-	Poller Poller
+	// Updates channel
+	Updates chan Update
 
 	// Handler is a set of handlers for different endpoints.
 	Handler *Handler
@@ -122,60 +104,6 @@ var (
 	cmdRx   = regexp.MustCompile(`^(/\w+)(@(\w+))?(\s|$)(.+)?`)
 	cbackRx = regexp.MustCompile(`^\f([-\w]+)(\|(.+))?$`)
 )
-
-// Start brings bot into motion by consuming incoming
-// updates (see Bot.Updates channel).
-func (b *Bot) Start() {
-	if b.Poller == nil {
-		panic("telebot: can't start without a poller")
-	}
-
-	// do nothing if called twice
-	b.stopMu.Lock()
-	if b.stopClient != nil {
-		b.stopMu.Unlock()
-		return
-	}
-
-	b.stopClient = make(chan struct{})
-	b.stopMu.Unlock()
-
-	stop := make(chan struct{})
-	stopConfirm := make(chan struct{})
-
-	go func() {
-		b.Poller.Poll(b, b.Updates, stop)
-		close(stopConfirm)
-	}()
-
-	for {
-		select {
-		// handle incoming updates
-		case upd := <-b.Updates:
-			b.ProcessUpdate(upd)
-			// call to stop polling
-		case confirm := <-b.stop:
-			close(stop)
-			<-stopConfirm
-			close(confirm)
-			return
-		}
-	}
-}
-
-// Stop gracefully shuts the poller down.
-func (b *Bot) Stop() {
-	b.stopMu.Lock()
-	if b.stopClient != nil {
-		close(b.stopClient)
-		b.stopClient = nil
-	}
-	b.stopMu.Unlock()
-
-	confirm := make(chan struct{})
-	b.stop <- confirm
-	<-confirm
-}
 
 // NewMarkup simply returns newly created markup instance.
 func (b *Bot) NewMarkup() *ReplyMarkup {

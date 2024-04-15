@@ -67,59 +67,13 @@ func TestNewBot(t *testing.T) {
 	client := &http.Client{Timeout: time.Minute}
 	pref.URL = "http://api.telegram.org" // not https
 	pref.Client = client
-	pref.Poller = &LongPoller{Timeout: time.Second}
-	pref.Updates = 50
 	pref.Offline = true
 
 	b, err = NewBot(pref)
 	require.NoError(t, err)
 	assert.Equal(t, client, b.client)
 	assert.Equal(t, pref.URL, b.URL)
-	assert.Equal(t, pref.Poller, b.Poller)
 	assert.Equal(t, 50, cap(b.Updates))
-}
-
-func TestBotStart(t *testing.T) {
-	if token == "" {
-		t.Skip("TELEBOT_SECRET is required")
-	}
-
-	pref := defaultSettings()
-	pref.Poller = &LongPoller{}
-
-	b, err := NewBot(pref)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// remove webhook to be sure that bot can poll
-	require.NoError(t, b.RemoveWebhook())
-
-	go b.Start()
-	b.Stop()
-
-	tp := newTestPoller()
-	go func() {
-		tp.updates <- Update{Message: &Message{Text: "/start"}}
-	}()
-
-	b, err = NewBot(pref)
-	require.NoError(t, err)
-	b.Poller = tp
-
-	var ok bool
-	b.handler.Handle("/start", func(c Context) error {
-		assert.Equal(t, c.Text(), "/start")
-		tp.done <- struct{}{}
-		ok = true
-		return nil
-	})
-
-	go b.Start()
-	<-tp.done
-	b.Stop()
-
-	assert.True(t, ok)
 }
 
 func TestBotProcessUpdate(t *testing.T) {

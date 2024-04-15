@@ -24,6 +24,8 @@ type Update struct {
 	ChatJoinRequest      *ChatJoinRequest      `json:"chat_join_request,omitempty"`
 	Boost                *BoostUpdated         `json:"chat_boost"`
 	BoostRemoved         *BoostRemoved         `json:"removed_chat_boost"`
+
+	Args map[string]string
 }
 
 // ProcessUpdate processes a single incoming update.
