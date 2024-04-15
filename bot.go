@@ -10,46 +10,33 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
 // NewBot does try to build a Bot with token `token`, which
 // is a secret API key assigned to particular bot.
 func NewBot(pref Settings) (*Bot, error) {
-	if pref.Updates == 0 {
-		pref.Updates = 100
-	}
-
 	client := pref.Client
 	if client == nil {
 		client = &http.Client{Timeout: time.Minute}
 	}
 
+	if pref.Handler == nil {
+		pref.Handler = NewHandler(HandlerSettings{})
+	}
+
 	if pref.URL == "" {
 		pref.URL = DefaultApiURL
-	}
-	if pref.Poller == nil {
-		pref.Poller = &LongPoller{}
-	}
-	if pref.OnError == nil {
-		pref.OnError = defaultOnError
 	}
 
 	bot := &Bot{
 		Token:   pref.Token,
 		URL:     pref.URL,
-		Poller:  pref.Poller,
-		onError: pref.OnError,
+		handler: pref.Handler,
 
-		Updates:  make(chan Update, pref.Updates),
-		handlers: make(map[string]HandlerFunc),
-		stop:     make(chan chan struct{}),
+		Updates: pref.Updates,
 
-		synchronous: pref.Synchronous,
-		verbose:     pref.Verbose,
-		parseMode:   pref.ParseMode,
-		client:      client,
+		client: client,
 	}
 
 	if pref.Offline {
@@ -62,7 +49,6 @@ func NewBot(pref Settings) (*Bot, error) {
 		bot.Me = user
 	}
 
-	bot.group = bot.Group()
 	return bot, nil
 }
 
@@ -72,19 +58,9 @@ type Bot struct {
 	Token   string
 	URL     string
 	Updates chan Update
-	Poller  Poller
-	onError func(error, Context)
+	handler *Handler
 
-	group       *Group
-	handlers    map[string]HandlerFunc
-	synchronous bool
-	verbose     bool
-	parseMode   ParseMode
-	stop        chan chan struct{}
-	client      *http.Client
-
-	stopMu     sync.RWMutex
-	stopClient chan struct{}
+	client *http.Client
 }
 
 // Settings represents a utility struct for passing certain
@@ -93,29 +69,11 @@ type Settings struct {
 	URL   string
 	Token string
 
-	// Updates channel capacity, defaulted to 100.
-	Updates int
+	// Updates channel
+	Updates chan Update
 
-	// Poller is the provider of Updates.
-	Poller Poller
-
-	// Synchronous prevents handlers from running in parallel.
-	// It makes ProcessUpdate return after the handler is finished.
-	Synchronous bool
-
-	// Verbose forces bot to log all upcoming requests.
-	// Use for debugging purposes only.
-	Verbose bool
-
-	// ParseMode used to set default parse mode of all sent messages.
-	// It attaches to every send, edit or whatever method. You also
-	// will be able to override the default mode by passing a new one.
-	ParseMode ParseMode
-
-	// OnError is a callback function that will get called on errors
-	// resulted from the handler. It is used as post-middleware function.
-	// Notice that context can be nil.
-	OnError func(error, Context)
+	// Handler is a set of handlers for different endpoints.
+	Handler *Handler
 
 	// HTTP Client used to make requests to telegram api
 	Client *http.Client
@@ -133,119 +91,19 @@ var defaultOnError = func(err error, c Context) {
 }
 
 func (b *Bot) OnError(err error, c Context) {
-	b.onError(err, c)
+	b.handler.onError(err, c)
 }
 
 func (b *Bot) debug(err error) {
-	if b.verbose {
+	if b.handler.verbose {
 		b.OnError(err, nil)
 	}
-}
-
-// Group returns a new group.
-func (b *Bot) Group() *Group {
-	return &Group{b: b}
-}
-
-// Use adds middleware to the global bot chain.
-func (b *Bot) Use(middleware ...MiddlewareFunc) {
-	b.group.Use(middleware...)
 }
 
 var (
 	cmdRx   = regexp.MustCompile(`^(/\w+)(@(\w+))?(\s|$)(.+)?`)
 	cbackRx = regexp.MustCompile(`^\f([-\w]+)(\|(.+))?$`)
 )
-
-// Handle lets you set the handler for some command name or
-// one of the supported endpoints. It also applies middleware
-// if such passed to the function.
-//
-// Example:
-//
-//	b.Handle("/start", func (c tele.Context) error {
-//		return c.Reply("Hello!")
-//	})
-//
-//	b.Handle(&inlineButton, func (c tele.Context) error {
-//		return c.Respond(&tele.CallbackResponse{Text: "Hello!"})
-//	})
-//
-// Middleware usage:
-//
-//	b.Handle("/ban", onBan, middleware.Whitelist(ids...))
-func (b *Bot) Handle(endpoint interface{}, h HandlerFunc, m ...MiddlewareFunc) {
-	if len(b.group.middleware) > 0 {
-		m = appendMiddleware(b.group.middleware, m)
-	}
-
-	handler := func(c Context) error {
-		return applyMiddleware(h, m...)(c)
-	}
-
-	switch end := endpoint.(type) {
-	case string:
-		b.handlers[end] = handler
-	case CallbackEndpoint:
-		b.handlers[end.CallbackUnique()] = handler
-	default:
-		panic("telebot: unsupported endpoint")
-	}
-}
-
-// Start brings bot into motion by consuming incoming
-// updates (see Bot.Updates channel).
-func (b *Bot) Start() {
-	if b.Poller == nil {
-		panic("telebot: can't start without a poller")
-	}
-
-	// do nothing if called twice
-	b.stopMu.Lock()
-	if b.stopClient != nil {
-		b.stopMu.Unlock()
-		return
-	}
-
-	b.stopClient = make(chan struct{})
-	b.stopMu.Unlock()
-
-	stop := make(chan struct{})
-	stopConfirm := make(chan struct{})
-
-	go func() {
-		b.Poller.Poll(b, b.Updates, stop)
-		close(stopConfirm)
-	}()
-
-	for {
-		select {
-		// handle incoming updates
-		case upd := <-b.Updates:
-			b.ProcessUpdate(upd)
-			// call to stop polling
-		case confirm := <-b.stop:
-			close(stop)
-			<-stopConfirm
-			close(confirm)
-			return
-		}
-	}
-}
-
-// Stop gracefully shuts the poller down.
-func (b *Bot) Stop() {
-	b.stopMu.Lock()
-	if b.stopClient != nil {
-		close(b.stopClient)
-		b.stopClient = nil
-	}
-	b.stopMu.Unlock()
-
-	confirm := make(chan struct{})
-	b.stop <- confirm
-	<-confirm
-}
 
 // NewMarkup simply returns newly created markup instance.
 func (b *Bot) NewMarkup() *ReplyMarkup {

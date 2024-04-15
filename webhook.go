@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 )
 
@@ -37,7 +39,6 @@ type WebhookEndpoint struct {
 //
 // You can also leave the Listen field empty. In this case it is up to the caller to
 // add the Webhook to a http-mux.
-//
 type Webhook struct {
 	Listen         string   `json:"url"`
 	MaxConnections int      `json:"max_connections"`
@@ -56,8 +57,11 @@ type Webhook struct {
 	TLS      *WebhookTLS
 	Endpoint *WebhookEndpoint
 
+	// Additional settings and fields
+	Verbose bool
+
 	dest chan<- Update
-	bot  *Bot
+	stop chan chan struct{}
 }
 
 func (h *Webhook) getFiles() map[string]File {
@@ -82,7 +86,7 @@ func (h *Webhook) getFiles() map[string]File {
 	return m
 }
 
-func (h *Webhook) getParams() map[string]string {
+func (h *Webhook) getParams(args map[string]string) map[string]string {
 	params := make(map[string]string)
 
 	if h.MaxConnections != 0 {
@@ -114,34 +118,38 @@ func (h *Webhook) getParams() map[string]string {
 	if h.Endpoint != nil {
 		params["url"] = h.Endpoint.PublicURL
 	}
+	if args != nil {
+		uv := url.Values{}
+		for k, v := range args {
+			uv.Set(k, v)
+		}
+
+		params["url"] += "?" + uv.Encode()
+	}
 	return params
 }
 
-func (h *Webhook) Poll(b *Bot, dest chan Update, stop chan struct{}) {
-	if err := b.SetWebhook(h); err != nil {
-		b.OnError(err, nil)
-		close(stop)
+func (h *Webhook) Start(dest chan Update) {
+	if dest == nil {
 		return
 	}
-
-	// store the variables so the HTTP-handler can use 'em
-	h.dest = dest
-	h.bot = b
-
 	if h.Listen == "" {
-		h.waitForStop(stop)
 		return
 	}
+
+	h.dest = dest
+	h.stop = make(chan chan struct{})
 
 	s := &http.Server{
 		Addr:    h.Listen,
 		Handler: h,
 	}
 
-	go func(stop chan struct{}) {
-		h.waitForStop(stop)
+	go func() {
+		confirm := <-h.stop
 		s.Shutdown(context.Background())
-	}(stop)
+		close(confirm)
+	}()
 
 	if h.TLS != nil {
 		s.ListenAndServeTLS(h.TLS.Cert, h.TLS.Key)
@@ -150,25 +158,47 @@ func (h *Webhook) Poll(b *Bot, dest chan Update, stop chan struct{}) {
 	}
 }
 
-func (h *Webhook) waitForStop(stop chan struct{}) {
-	<-stop
-	close(stop)
+// Stop gracefully shuts the poller down.
+func (h *Webhook) Stop() {
+	confirm := make(chan struct{})
+	h.stop <- confirm
+	<-confirm
 }
 
 // The handler simply reads the update from the body of the requests
 // and writes them to the update channel.
 func (h *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.SecretToken != "" && r.Header.Get("X-Telegram-Bot-Api-Secret-Token") != h.SecretToken {
-		h.bot.debug(fmt.Errorf("invalid secret token in request"))
+		h.debug(fmt.Errorf("invalid secret token in request"))
 		return
 	}
 
 	var update Update
 	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
-		h.bot.debug(fmt.Errorf("cannot decode update: %v", err))
+		h.debug(fmt.Errorf("cannot decode update: %v", err))
 		return
 	}
+
+	values, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		h.debug(fmt.Errorf("cannot parse query: %v", err))
+		return
+	}
+
+	if len(values) > 0 {
+		update.Args = make(map[string]string, len(values))
+		for k, v := range values {
+			update.Args[k] = v[0]
+		}
+	}
+
 	h.dest <- update
+}
+
+func (h *Webhook) debug(err error) {
+	if h.Verbose {
+		log.Println(err)
+	}
 }
 
 // Webhook returns the current webhook status.
@@ -189,8 +219,8 @@ func (b *Bot) Webhook() (*Webhook, error) {
 
 // SetWebhook configures a bot to receive incoming
 // updates via an outgoing webhook.
-func (b *Bot) SetWebhook(w *Webhook) error {
-	_, err := b.sendFiles("setWebhook", w.getFiles(), w.getParams())
+func (b *Bot) SetWebhook(w *Webhook, args map[string]string) error {
+	_, err := b.sendFiles("setWebhook", w.getFiles(), w.getParams(args))
 	return err
 }
 

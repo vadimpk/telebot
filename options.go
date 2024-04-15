@@ -150,8 +150,8 @@ func extractOptions(how []interface{}) *SendOptions {
 }
 
 func (b *Bot) embedSendOptions(params map[string]string, opt *SendOptions) {
-	if b.parseMode != ModeDefault {
-		params["parse_mode"] = b.parseMode
+	if b.handler.parseMode != ModeDefault {
+		params["parse_mode"] = b.handler.parseMode
 	}
 
 	if opt == nil {

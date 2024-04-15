@@ -14,16 +14,12 @@ import (
 )
 
 type Settings struct {
-	URL     string
-	Token   string
-	Updates int
+	URL   string
+	Token string
 
 	LocalesDir string `yaml:"locales_dir"`
 	TokenEnv   string `yaml:"token_env"`
 	ParseMode  string `yaml:"parse_mode"`
-
-	Webhook    *tele.Webhook    `yaml:"webhook"`
-	LongPoller *tele.LongPoller `yaml:"long_poller"`
 }
 
 func (lt *Layout) UnmarshalYAML(data []byte) error {
@@ -50,20 +46,15 @@ func (lt *Layout) UnmarshalYAML(data []byte) error {
 
 	if pref := aux.Settings; pref != nil {
 		lt.pref = &tele.Settings{
-			URL:       pref.URL,
-			Token:     pref.Token,
-			Updates:   pref.Updates,
-			ParseMode: pref.ParseMode,
+			URL:   pref.URL,
+			Token: pref.Token,
+			Handler: tele.NewHandler(tele.HandlerSettings{
+				ParseMode: pref.ParseMode,
+			}),
 		}
 
 		if pref.TokenEnv != "" {
 			lt.pref.Token = os.Getenv(pref.TokenEnv)
-		}
-
-		if pref.Webhook != nil {
-			lt.pref.Poller = pref.Webhook
-		} else if pref.LongPoller != nil {
-			lt.pref.Poller = pref.LongPoller
 		}
 	}
 

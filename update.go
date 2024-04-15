@@ -24,6 +24,8 @@ type Update struct {
 	ChatJoinRequest      *ChatJoinRequest      `json:"chat_join_request,omitempty"`
 	Boost                *BoostUpdated         `json:"chat_boost"`
 	BoostRemoved         *BoostRemoved         `json:"removed_chat_boost"`
+
+	Args map[string]string
 }
 
 // ProcessUpdate processes a single incoming update.
@@ -255,7 +257,7 @@ func (b *Bot) ProcessUpdate(u Update) {
 			match := cbackRx.FindAllStringSubmatch(data, -1)
 			if match != nil {
 				unique, payload := match[0][1], match[0][3]
-				if handler, ok := b.handlers["\f"+unique]; ok {
+				if handler, ok := b.handler.handlers["\f"+unique]; ok {
 					u.Callback.Unique = unique
 					u.Callback.Data = payload
 					b.runHandler(handler, c)
@@ -325,7 +327,7 @@ func (b *Bot) ProcessUpdate(u Update) {
 }
 
 func (b *Bot) handle(end string, c Context) bool {
-	if handler, ok := b.handlers[end]; ok {
+	if handler, ok := b.handler.handlers[end]; ok {
 		b.runHandler(handler, c)
 		return true
 	}
@@ -372,7 +374,7 @@ func (b *Bot) runHandler(h HandlerFunc, c Context) {
 			b.OnError(err, c)
 		}
 	}
-	if b.synchronous {
+	if b.handler.synchronous {
 		f()
 	} else {
 		go f()
