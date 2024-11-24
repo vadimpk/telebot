@@ -3,7 +3,6 @@ package telebot
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -60,7 +59,7 @@ type Webhook struct {
 	Endpoint *WebhookEndpoint
 
 	dest chan<- Update
-	bot  *Bot
+	stop chan chan struct{}
 }
 
 func (h *Webhook) getFiles() map[string]File {
@@ -129,25 +128,27 @@ func (h *Webhook) getParams(args map[string]string) map[string]string {
 	return params
 }
 
-func (h *Webhook) Poll(b *Bot, dest chan Update, stop chan struct{}) {
-	// store the variables so the HTTP-handler can use 'em
-	h.dest = dest
-	h.bot = b
-
-	if h.Listen == "" {
-		h.waitForStop(stop)
+func (h *Webhook) Start(dest chan Update) {
+	if dest == nil {
 		return
 	}
+	if h.Listen == "" {
+		return
+	}
+
+	h.dest = dest
+	h.stop = make(chan chan struct{})
 
 	s := &http.Server{
 		Addr:    h.Listen,
 		Handler: h,
 	}
 
-	go func(stop chan struct{}) {
-		h.waitForStop(stop)
+	go func() {
+		confirm := <-h.stop
 		s.Shutdown(context.Background())
-	}(stop)
+		close(confirm)
+	}()
 
 	if h.TLS != nil {
 		s.ListenAndServeTLS(h.TLS.Cert, h.TLS.Key)
@@ -156,28 +157,28 @@ func (h *Webhook) Poll(b *Bot, dest chan Update, stop chan struct{}) {
 	}
 }
 
-func (h *Webhook) waitForStop(stop chan struct{}) {
-	<-stop
-	close(stop)
+// Stop gracefully shuts the poller down.
+func (h *Webhook) Stop() {
+	confirm := make(chan struct{})
+	h.stop <- confirm
+	<-confirm
 }
 
 // The handler simply reads the update from the body of the requests
 // and writes them to the update channel.
 func (h *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if h.SecretToken != "" && r.Header.Get("X-Telegram-Bot-Api-Secret-Token") != h.SecretToken {
-		h.bot.debug(fmt.Errorf("invalid secret token in request"))
-		return
-	}
-
 	var update Update
+	update.Secret = r.Header.Get("X-Telegram-Bot-Api-Secret-Token")
 	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
-		h.bot.debug(fmt.Errorf("cannot decode update: %v", err))
+		update.Error = err
+		h.dest <- update
 		return
 	}
 
 	values, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil {
-		h.bot.debug(fmt.Errorf("cannot parse query: %v", err))
+		update.Error = err
+		h.dest <- update
 		return
 	}
 

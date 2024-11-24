@@ -32,8 +32,13 @@ type Update struct {
 	EditedBusinessMessage   *Message                 `json:"edited_business_message"`
 	DeletedBusinessMessages *BusinessMessagesDeleted `json:"deleted_business_messages"`
 
+	// Secret is a secret header passed in http request along with update.
+	Secret string
 	// Args is a custom map of arguments that can be passed to the update.
 	Args map[string]string
+
+	// Error field is used to store an error that occurred while processing the update.
+	Error error
 }
 
 // ProcessUpdate processes an update with registered handlers
