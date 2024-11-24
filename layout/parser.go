@@ -61,7 +61,7 @@ func (lt *Layout) UnmarshalYAML(data []byte) error {
 		}
 
 		if pref.Webhook != nil {
-			lt.pref.Poller = pref.Webhook
+			//lt.pref.Poller = pref.Webhook
 		} else if pref.LongPoller != nil {
 			lt.pref.Poller = pref.LongPoller
 		}
