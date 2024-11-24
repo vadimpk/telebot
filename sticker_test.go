@@ -30,7 +30,7 @@ func TestStickerSet(t *testing.T) {
 	}
 
 	original := &StickerSet{
-		Name:   fmt.Sprintf("telebot_%d_by_%s", time.Now().Unix(), b.Me.Username),
+		Name:   fmt.Sprintf("telebot_%d_by_%s", time.Now().Unix(), b.Me().Username),
 		Type:   StickerRegular,
 		Format: StickerStatic,
 		Title:  "Telebot Stickers",

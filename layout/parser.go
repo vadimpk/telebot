@@ -50,10 +50,10 @@ func (lt *Layout) UnmarshalYAML(data []byte) error {
 
 	if pref := aux.Settings; pref != nil {
 		lt.pref = &tele.Settings{
-			URL:       pref.URL,
-			Token:     pref.Token,
-			Updates:   pref.Updates,
-			ParseMode: pref.ParseMode,
+			URL:     pref.URL,
+			Token:   pref.Token,
+			Updates: pref.Updates,
+			//ParseMode: pref.ParseMode,
 		}
 
 		if pref.TokenEnv != "" {

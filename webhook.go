@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 )
 
@@ -39,7 +40,6 @@ type WebhookEndpoint struct {
 // add the Webhook to a http-mux.
 //
 // If you want to ignore the automatic setWebhook call, you can set IgnoreSetWebhook to true.
-//
 type Webhook struct {
 	Listen           string   `json:"url"`
 	MaxConnections   int      `json:"max_connections"`
@@ -85,7 +85,7 @@ func (h *Webhook) getFiles() map[string]File {
 	return m
 }
 
-func (h *Webhook) getParams() map[string]string {
+func (h *Webhook) getParams(args map[string]string) map[string]string {
 	params := make(map[string]string)
 
 	if h.MaxConnections != 0 {
@@ -117,19 +117,19 @@ func (h *Webhook) getParams() map[string]string {
 	if h.Endpoint != nil {
 		params["url"] = h.Endpoint.PublicURL
 	}
+	if args != nil {
+		uv := url.Values{}
+		for k, v := range args {
+			uv.Set(k, v)
+		}
+
+		params["url"] += "?" + uv.Encode()
+	}
+
 	return params
 }
 
 func (h *Webhook) Poll(b *Bot, dest chan Update, stop chan struct{}) {
-	// by default, the set webhook method will be called, to ignore it, set IgnoreSetWebhook to true
-	if !h.IgnoreSetWebhook {
-		if err := b.SetWebhook(h); err != nil {
-			b.OnError(err, nil)
-			close(stop)
-			return
-		}
-	}
-
 	// store the variables so the HTTP-handler can use 'em
 	h.dest = dest
 	h.bot = b
@@ -174,6 +174,20 @@ func (h *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.bot.debug(fmt.Errorf("cannot decode update: %v", err))
 		return
 	}
+
+	values, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		h.bot.debug(fmt.Errorf("cannot parse query: %v", err))
+		return
+	}
+
+	if len(values) > 0 {
+		update.Args = make(map[string]string, len(values))
+		for k, v := range values {
+			update.Args[k] = v[0]
+		}
+	}
+
 	h.dest <- update
 }
 
@@ -195,8 +209,8 @@ func (b *Bot) Webhook() (*Webhook, error) {
 
 // SetWebhook configures a bot to receive incoming
 // updates via an outgoing webhook.
-func (b *Bot) SetWebhook(w *Webhook) error {
-	_, err := b.sendFiles("setWebhook", w.getFiles(), w.getParams())
+func (b *Bot) SetWebhook(w *Webhook, args map[string]string) error {
+	_, err := b.sendFiles("setWebhook", w.getFiles(), w.getParams(args))
 	return err
 }
 

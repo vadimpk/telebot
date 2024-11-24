@@ -544,7 +544,7 @@ func (c *nativeContext) DeleteAfter(d time.Duration) *time.Timer {
 	return time.AfterFunc(d, func() {
 		if err := c.Delete(); err != nil {
 			if b, ok := c.b.(*Bot); ok {
-				b.OnError(err, c)
+				b.handler.onError(err, c)
 			}
 		}
 	})

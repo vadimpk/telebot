@@ -58,6 +58,7 @@ type API interface {
 	Leave(chat Recipient) error
 	Len(chat *Chat) (int, error)
 	Logout() (bool, error)
+	Me() *User
 	MenuButton(chat *User) (*MenuButton, error)
 	MyDescription(language string) (*BotInfo, error)
 	MyName(language string) (*BotInfo, error)
@@ -98,7 +99,7 @@ type API interface {
 	SetStickerPosition(sticker string, position int) error
 	SetStickerSetThumb(of Recipient, set *StickerSet) error
 	SetStickerSetTitle(s StickerSet) error
-	SetWebhook(w *Webhook) error
+	SetWebhook(w *Webhook, args map[string]string) error
 	Ship(query *ShippingQuery, what ...interface{}) error
 	StarTransactions(offset, limit int) ([]StarTransaction, error)
 	StickerSet(name string) (*StickerSet, error)

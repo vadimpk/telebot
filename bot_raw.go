@@ -20,7 +20,7 @@ import (
 // It also handles API errors, so you only need to unwrap
 // result field from json data.
 func (b *Bot) Raw(method string, payload interface{}) ([]byte, error) {
-	url := b.URL + "/bot" + b.Token + "/" + method
+	url := b.handler.URL + "/bot" + b.Token + "/" + method
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(payload); err != nil {
@@ -34,12 +34,8 @@ func (b *Bot) Raw(method string, payload interface{}) ([]byte, error) {
 	defer cancel()
 
 	go func() {
-		b.stopMu.RLock()
-		stopCh := b.stopClient
-		b.stopMu.RUnlock()
-
 		select {
-		case <-stopCh:
+		case <-b.handler.stop:
 			cancel()
 		case <-ctx.Done():
 		}
@@ -51,7 +47,7 @@ func (b *Bot) Raw(method string, payload interface{}) ([]byte, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := b.client.Do(req)
+	resp, err := b.handler.client.Do(req)
 	if err != nil {
 		return nil, wrapError(err)
 	}
@@ -63,7 +59,7 @@ func (b *Bot) Raw(method string, payload interface{}) ([]byte, error) {
 		return nil, wrapError(err)
 	}
 
-	if b.verbose {
+	if b.handler.verbose {
 		verbose(method, payload, data)
 	}
 
@@ -116,9 +112,9 @@ func (b *Bot) sendFiles(method string, files map[string]File, params map[string]
 		}
 	}()
 
-	url := b.URL + "/bot" + b.Token + "/" + method
+	url := b.handler.URL + "/bot" + b.Token + "/" + method
 
-	resp, err := b.client.Post(url, writer.FormDataContentType(), pipeReader)
+	resp, err := b.handler.client.Post(url, writer.FormDataContentType(), pipeReader)
 	if err != nil {
 		err = wrapError(err)
 		pipeReader.CloseWithError(err)

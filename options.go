@@ -107,7 +107,7 @@ func (og *SendOptions) copy() *SendOptions {
 
 func (b *Bot) extractOptions(how []interface{}) *SendOptions {
 	opts := &SendOptions{
-		ParseMode: b.parseMode,
+		ParseMode: b.handler.parseMode,
 	}
 
 	for _, prop := range how {

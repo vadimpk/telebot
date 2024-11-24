@@ -43,8 +43,6 @@ func Recover(onError ...RecoverFunc) tele.MiddlewareFunc {
 			var f RecoverFunc
 			if len(onError) > 0 {
 				f = onError[0]
-			} else if b, ok := c.Bot().(*tele.Bot); ok {
-				f = b.OnError
 			} else {
 				f = func(err error, _ tele.Context) {
 					log.Println("telebot/middleware/recover:", err)

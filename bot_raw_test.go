@@ -65,8 +65,8 @@ func TestRaw(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(testRawServer))
 	defer srv.Close()
 
-	b.URL = srv.URL
-	b.client = srv.Client()
+	b.handler.URL = srv.URL
+	b.handler.client = srv.Client()
 
 	_, err = b.Raw("testReadError", nil)
 	assert.EqualError(t, err, "telebot: "+io.ErrUnexpectedEOF.Error())

@@ -47,7 +47,7 @@ func (r *ResultBase) SetReplyMarkup(markup *ReplyMarkup) {
 
 func (r *ResultBase) Process(b *Bot) {
 	if r.ParseMode == ModeDefault {
-		r.ParseMode = b.parseMode
+		r.ParseMode = b.handler.parseMode
 	}
 	if r.Content != nil {
 		c, ok := r.Content.(*InputTextMessageContent)

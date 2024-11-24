@@ -2,16 +2,13 @@ package telebot
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 )
 
 // NewBot does try to build a Bot with token `token`, which
@@ -21,9 +18,8 @@ func NewBot(pref Settings) (*Bot, error) {
 		pref.Updates = 100
 	}
 
-	client := pref.Client
-	if client == nil {
-		client = &http.Client{Timeout: time.Minute}
+	if pref.Handler == nil {
+		return nil, errors.New("telebot: Handler is required")
 	}
 
 	if pref.URL == "" {
@@ -32,59 +28,36 @@ func NewBot(pref Settings) (*Bot, error) {
 	if pref.Poller == nil {
 		pref.Poller = &LongPoller{}
 	}
-	if pref.OnError == nil {
-		pref.OnError = defaultOnError
-	}
 
 	bot := &Bot{
 		Token:   pref.Token,
-		URL:     pref.URL,
+		handler: pref.Handler,
 		Poller:  pref.Poller,
-		onError: pref.OnError,
 
-		Updates:  make(chan Update, pref.Updates),
-		handlers: make(map[string]HandlerFunc),
-		stop:     make(chan chan struct{}),
-
-		synchronous: pref.Synchronous,
-		verbose:     pref.Verbose,
-		parseMode:   pref.ParseMode,
-		client:      client,
+		Updates: make(chan Update, pref.Updates),
 	}
 
-	if pref.Offline {
-		bot.Me = &User{}
+	if pref.Handler.offline {
+		bot.me = &User{}
 	} else {
 		user, err := bot.getMe()
 		if err != nil {
 			return nil, err
 		}
-		bot.Me = user
+		bot.me = user
 	}
 
-	bot.group = bot.Group()
 	return bot, nil
 }
 
 // Bot represents a separate Telegram bot instance.
 type Bot struct {
-	Me      *User
 	Token   string
-	URL     string
 	Updates chan Update
 	Poller  Poller
-	onError func(error, Context)
 
-	group       *Group
-	handlers    map[string]HandlerFunc
-	synchronous bool
-	verbose     bool
-	parseMode   ParseMode
-	stop        chan chan struct{}
-	client      *http.Client
-
-	stopMu     sync.RWMutex
-	stopClient chan struct{}
+	handler *Handler
+	me      *User
 }
 
 // Settings represents a utility struct for passing certain
@@ -99,163 +72,18 @@ type Settings struct {
 	// Poller is the provider of Updates.
 	Poller Poller
 
-	// Synchronous prevents handlers from running in parallel.
-	// It makes ProcessUpdate return after the handler is finished.
-	Synchronous bool
-
-	// Verbose forces bot to log all upcoming requests.
-	// Use for debugging purposes only.
-	Verbose bool
-
-	// ParseMode used to set default parse mode of all sent messages.
-	// It attaches to every send, edit or whatever method. You also
-	// will be able to override the default mode by passing a new one.
-	ParseMode ParseMode
-
-	// OnError is a callback function that will get called on errors
-	// resulted from the handler. It is used as post-middleware function.
-	// Notice that context can be nil.
-	OnError func(error, Context)
-
-	// HTTP Client used to make requests to telegram api
-	Client *http.Client
-
-	// Offline allows to create a bot without network for testing purposes.
-	Offline bool
+	// Handler is the handler manager.
+	Handler *Handler
 }
 
-var defaultOnError = func(err error, c Context) {
-	if c != nil {
-		log.Println(c.Update().ID, err)
-	} else {
-		log.Println(err)
-	}
-}
-
-func (b *Bot) OnError(err error, c Context) {
-	b.onError(err, c)
+func (b *Bot) Me() *User {
+	return b.me
 }
 
 func (b *Bot) debug(err error) {
-	if b.verbose {
-		b.OnError(err, nil)
+	if b.handler.verbose {
+		b.handler.onError(err, nil)
 	}
-}
-
-// Group returns a new group.
-func (b *Bot) Group() *Group {
-	return &Group{b: b}
-}
-
-// Use adds middleware to the global bot chain.
-func (b *Bot) Use(middleware ...MiddlewareFunc) {
-	b.group.Use(middleware...)
-}
-
-var (
-	cmdRx   = regexp.MustCompile(`^(/\w+)(@(\w+))?(\s|$)(.+)?`)
-	cbackRx = regexp.MustCompile(`^\f([-\w]+)(\|(.+))?$`)
-)
-
-// Handle lets you set the handler for some command name or
-// one of the supported endpoints. It also applies middleware
-// if such passed to the function.
-//
-// Example:
-//
-//	b.Handle("/start", func (c tele.Context) error {
-//		return c.Reply("Hello!")
-//	})
-//
-//	b.Handle(&inlineButton, func (c tele.Context) error {
-//		return c.Respond(&tele.CallbackResponse{Text: "Hello!"})
-//	})
-//
-// Middleware usage:
-//
-//	b.Handle("/ban", onBan, middleware.Whitelist(ids...))
-func (b *Bot) Handle(endpoint interface{}, h HandlerFunc, m ...MiddlewareFunc) {
-	end := extractEndpoint(endpoint)
-	if end == "" {
-		panic("telebot: unsupported endpoint")
-	}
-
-	if len(b.group.middleware) > 0 {
-		m = appendMiddleware(b.group.middleware, m)
-	}
-
-	b.handlers[end] = func(c Context) error {
-		return applyMiddleware(h, m...)(c)
-	}
-}
-
-// Trigger executes the registered handler by the endpoint.
-func (b *Bot) Trigger(endpoint interface{}, c Context) error {
-	end := extractEndpoint(endpoint)
-	if end == "" {
-		return fmt.Errorf("telebot: unsupported endpoint")
-	}
-
-	handler, ok := b.handlers[end]
-	if !ok {
-		return fmt.Errorf("telebot: no handler found for given endpoint")
-	}
-
-	return handler(c)
-}
-
-// Start brings bot into motion by consuming incoming
-// updates (see Bot.Updates channel).
-func (b *Bot) Start() {
-	if b.Poller == nil {
-		panic("telebot: can't start without a poller")
-	}
-
-	// do nothing if called twice
-	b.stopMu.Lock()
-	if b.stopClient != nil {
-		b.stopMu.Unlock()
-		return
-	}
-
-	b.stopClient = make(chan struct{})
-	b.stopMu.Unlock()
-
-	stop := make(chan struct{})
-	stopConfirm := make(chan struct{})
-
-	go func() {
-		b.Poller.Poll(b, b.Updates, stop)
-		close(stopConfirm)
-	}()
-
-	for {
-		select {
-		// handle incoming updates
-		case upd := <-b.Updates:
-			b.ProcessUpdate(upd)
-			// call to stop polling
-		case confirm := <-b.stop:
-			close(stop)
-			<-stopConfirm
-			close(confirm)
-			return
-		}
-	}
-}
-
-// Stop gracefully shuts the poller down.
-func (b *Bot) Stop() {
-	b.stopMu.Lock()
-	if b.stopClient != nil {
-		close(b.stopClient)
-		b.stopClient = nil
-	}
-	b.stopMu.Unlock()
-
-	confirm := make(chan struct{})
-	b.stop <- confirm
-	<-confirm
 }
 
 // NewMarkup simply returns newly created markup instance.
@@ -957,7 +785,7 @@ func (b *Bot) File(file *File) (io.ReadCloser, error) {
 		return nil, err
 	}
 
-	url := b.URL + "/file/bot" + b.Token + "/" + f.FilePath
+	url := b.handler.URL + "/file/bot" + b.Token + "/" + f.FilePath
 	file.FilePath = f.FilePath // saving file path
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -965,7 +793,7 @@ func (b *Bot) File(file *File) (io.ReadCloser, error) {
 		return nil, wrapError(err)
 	}
 
-	resp, err := b.client.Do(req)
+	resp, err := b.handler.client.Do(req)
 	if err != nil {
 		return nil, wrapError(err)
 	}

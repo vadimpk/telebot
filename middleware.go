@@ -22,7 +22,7 @@ func applyMiddleware(h HandlerFunc, m ...MiddlewareFunc) HandlerFunc {
 
 // Group is a separated group of handlers, united by the general middleware.
 type Group struct {
-	b          *Bot
+	hm         *Handler
 	middleware []MiddlewareFunc
 }
 
@@ -34,5 +34,5 @@ func (g *Group) Use(middleware ...MiddlewareFunc) {
 // Handle adds endpoint handler to the bot, combining group's middleware
 // with the optional given middleware.
 func (g *Group) Handle(endpoint interface{}, h HandlerFunc, m ...MiddlewareFunc) {
-	g.b.Handle(endpoint, h, appendMiddleware(g.middleware, m)...)
+	g.hm.Handle(endpoint, h, appendMiddleware(g.middleware, m)...)
 }
