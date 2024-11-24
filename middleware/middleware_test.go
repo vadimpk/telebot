@@ -6,10 +6,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	tele "gopkg.in/telebot.v4"
+	tele "github.com/vadimpk/telebot"
 )
 
-var b, _ = tele.NewBot(tele.Settings{Offline: true})
+var b, _ = tele.NewBot(tele.Settings{Handler: tele.NewHandler(tele.HandlerSettings{Offline: true})})
 
 func TestRecover(t *testing.T) {
 	onError := func(err error, c tele.Context) {
