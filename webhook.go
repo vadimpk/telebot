@@ -169,6 +169,7 @@ func (h *Webhook) Stop() {
 func (h *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var update Update
 	update.Secret = r.Header.Get("X-Telegram-Bot-Api-Secret-Token")
+	update.Request = r
 	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
 		update.Error = err
 		h.dest <- update

@@ -14,27 +14,13 @@ import (
 // NewBot does try to build a Bot with token `token`, which
 // is a secret API key assigned to particular bot.
 func NewBot(pref Settings) (*Bot, error) {
-	if pref.Updates == 0 {
-		pref.Updates = 100
-	}
-
 	if pref.Handler == nil {
 		return nil, errors.New("telebot: Handler is required")
-	}
-
-	if pref.URL == "" {
-		pref.URL = DefaultApiURL
-	}
-	if pref.Poller == nil {
-		pref.Poller = &LongPoller{}
 	}
 
 	bot := &Bot{
 		Token:   pref.Token,
 		handler: pref.Handler,
-		Poller:  pref.Poller,
-
-		Updates: make(chan Update, pref.Updates),
 	}
 
 	if pref.Handler.offline {
@@ -53,9 +39,6 @@ func NewBot(pref Settings) (*Bot, error) {
 // Bot represents a separate Telegram bot instance.
 type Bot struct {
 	Token   string
-	Updates chan Update
-	Poller  Poller
-
 	handler *Handler
 	me      *User
 }
@@ -63,15 +46,7 @@ type Bot struct {
 // Settings represents a utility struct for passing certain
 // properties of a bot around and is required to make bots.
 type Settings struct {
-	URL   string
 	Token string
-
-	// Updates channel capacity, defaulted to 100.
-	Updates int
-
-	// Poller is the provider of Updates.
-	Poller Poller
-
 	// Handler is the handler manager.
 	Handler *Handler
 }

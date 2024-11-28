@@ -1,6 +1,7 @@
 package telebot
 
 import (
+	"net/http"
 	"regexp"
 	"strings"
 )
@@ -35,7 +36,8 @@ type Update struct {
 	// Secret is a secret header passed in http request along with update.
 	Secret string
 	// Args is a custom map of arguments that can be passed to the update.
-	Args map[string]string
+	Args    map[string]string
+	Request *http.Request
 
 	// Error field is used to store an error that occurred while processing the update.
 	Error error

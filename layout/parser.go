@@ -50,20 +50,11 @@ func (lt *Layout) UnmarshalYAML(data []byte) error {
 
 	if pref := aux.Settings; pref != nil {
 		lt.pref = &tele.Settings{
-			URL:     pref.URL,
-			Token:   pref.Token,
-			Updates: pref.Updates,
-			//ParseMode: pref.ParseMode,
+			Token: pref.Token,
 		}
 
 		if pref.TokenEnv != "" {
 			lt.pref.Token = os.Getenv(pref.TokenEnv)
-		}
-
-		if pref.Webhook != nil {
-			//lt.pref.Poller = pref.Webhook
-		} else if pref.LongPoller != nil {
-			lt.pref.Poller = pref.LongPoller
 		}
 	}
 
