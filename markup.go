@@ -95,6 +95,7 @@ type Btn struct {
 	Poll            PollType        `json:"request_poll,omitempty"`
 	User            *ReplyRecipient `json:"request_user,omitempty"`
 	Chat            *ReplyRecipient `json:"request_chat,omitempty"`
+	Copy            CopyText        `json:"copy_text,omitempty"`
 }
 
 // Row represents an array of buttons, a row.
@@ -297,6 +298,7 @@ type InlineButton struct {
 	WebApp                *WebApp            `json:"web_app,omitempty"`
 	CallbackGame          *CallbackGame      `json:"callback_game,omitempty"`
 	Pay                   bool               `json:"pay,omitempty"`
+	Copy                  CopyText           `json:"copy_text,omitempty"`
 }
 
 // MarshalJSON implements json.Marshaler interface.
@@ -355,7 +357,13 @@ func (b Btn) Inline() *InlineButton {
 		InlineQueryChat: b.InlineQueryChat,
 		Login:           b.Login,
 		WebApp:          b.WebApp,
+		Copy:            b.Copy,
 	}
+}
+
+// CopyText represents an inline keyboard button that copies specified text to the clipboard.
+type CopyText struct {
+	Text string `json:"text"`
 }
 
 // Login represents a parameter of the inline keyboard button
