@@ -95,7 +95,7 @@ type Btn struct {
 	Poll            PollType        `json:"request_poll,omitempty"`
 	User            *ReplyRecipient `json:"request_user,omitempty"`
 	Chat            *ReplyRecipient `json:"request_chat,omitempty"`
-	Copy            CopyText        `json:"copy_text,omitempty"`
+	Copy            *CopyText       `json:"copy_text,omitempty"`
 }
 
 // Row represents an array of buttons, a row.
@@ -292,13 +292,13 @@ type InlineButton struct {
 	URL                   string             `json:"url,omitempty"`
 	Data                  string             `json:"callback_data,omitempty"`
 	InlineQuery           string             `json:"switch_inline_query,omitempty"`
-	InlineQueryChat       string             `json:"switch_inline_query_current_chat"`
+	InlineQueryChat       string             `json:"switch_inline_query_current_chat,omitempty"`
 	InlineQueryChosenChat *SwitchInlineQuery `json:"switch_inline_query_chosen_chat,omitempty"`
 	Login                 *Login             `json:"login_url,omitempty"`
 	WebApp                *WebApp            `json:"web_app,omitempty"`
 	CallbackGame          *CallbackGame      `json:"callback_game,omitempty"`
 	Pay                   bool               `json:"pay,omitempty"`
-	Copy                  CopyText           `json:"copy_text,omitempty"`
+	Copy                  *CopyText          `json:"copy_text,omitempty"`
 }
 
 // MarshalJSON implements json.Marshaler interface.
